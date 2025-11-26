@@ -270,17 +270,14 @@ def process_csv(input_file: str, output_file: str):
             'LAST_NAME': person['LAST_NAME'],
         }
         
-        # Add phones
+        # Add only the first phone number
         if unique_pairs:
             output_row['PRIMARY_PHONE'] = unique_pairs[0][0]
-            for i in range(1, min(len(unique_pairs), 200)):  # Support up to PHONE_200
-                output_row[f'PHONE_{i}'] = unique_pairs[i][0]
+            # Add DNC value for the first phone
+            if unique_pairs[0][1]:
+                output_row['PHONE_DNC'] = unique_pairs[0][1]
         else:
             output_row['PRIMARY_PHONE'] = ''
-        
-        # Add only the first phone's DNC value (one column only)
-        if unique_pairs and unique_pairs[0][1]:
-            output_row['PHONE_DNC'] = unique_pairs[0][1]
         
         # Add emails
         emails_list = list(person['emails'])
@@ -314,13 +311,13 @@ def process_csv(input_file: str, output_file: str):
     
     # Sort fields: put standard fields first, then others
     standard_fields = ['FIRST_NAME', 'LAST_NAME', 'PRIMARY_PHONE', 'PRIMARY_EMAIL']
-    email_fields = sorted([f for f in all_fields if f.startswith('EMAIL_')])
-    phone_fields = sorted([f for f in all_fields if f.startswith('PHONE_') and not f.startswith('PHONE_DNC')])
     dnc_field = ['PHONE_DNC'] if 'PHONE_DNC' in all_fields else []
-    other_fields = sorted([f for f in all_fields if f not in standard_fields + email_fields + phone_fields + dnc_field])
+    email_fields = sorted([f for f in all_fields if f.startswith('EMAIL_')])
+    # Exclude all PHONE_* columns except PRIMARY_PHONE and PHONE_DNC
+    other_fields = sorted([f for f in all_fields if f not in standard_fields + dnc_field + email_fields and not f.startswith('PHONE_')])
     
-    # Order: standard, emails, phones, DNC field, others
-    fieldnames_output = standard_fields + email_fields + phone_fields + dnc_field + other_fields
+    # Order: standard fields (includes PRIMARY_PHONE), DNC field, emails, others
+    fieldnames_output = standard_fields + dnc_field + email_fields + other_fields
     
     with open(output_file, 'w', newline='', encoding='utf-8') as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames_output, extrasaction='ignore')
