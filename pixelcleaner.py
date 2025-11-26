@@ -178,7 +178,7 @@ def process_csv(input_file: str, output_file: str):
                         if cleaned_phone:
                             person['direct_phone'] = cleaned_phone
                             person['found_direct'] = True
-                            # Get DNC value for direct phone
+                            # Get DNC value for direct phone (first phone's DNC)
                             direct_dnc = row.get('DIRECT_NUMBER_DNC', '').strip().upper()
                             if direct_dnc:
                                 dnc_flags = extract_multiple(direct_dnc)
@@ -187,6 +187,7 @@ def process_csv(input_file: str, output_file: str):
                             break
             
             # Extract MOBILE_PHONE - ONLY from MOBILE_PHONE field
+            # Try to find a different number than direct phone
             if not person['found_mobile']:
                 mobile_number = row.get('MOBILE_PHONE', '')
                 if mobile_number:
@@ -194,11 +195,14 @@ def process_csv(input_file: str, output_file: str):
                     for phone_str in phones:
                         cleaned_phone = clean_phone(phone_str)
                         if cleaned_phone:
-                            person['mobile_phone'] = cleaned_phone
-                            person['found_mobile'] = True
-                            break
+                            # Only use if different from direct phone
+                            if cleaned_phone != person['direct_phone'] or not person['found_direct']:
+                                person['mobile_phone'] = cleaned_phone
+                                person['found_mobile'] = True
+                                break
             
             # Extract PERSONAL_PHONE - ONLY from PERSONAL_PHONE field
+            # Try to find a different number than direct and mobile phones
             if not person['found_personal']:
                 personal_number = row.get('PERSONAL_PHONE', '')
                 if personal_number:
@@ -206,9 +210,12 @@ def process_csv(input_file: str, output_file: str):
                     for phone_str in phones:
                         cleaned_phone = clean_phone(phone_str)
                         if cleaned_phone:
-                            person['personal_phone'] = cleaned_phone
-                            person['found_personal'] = True
-                            break
+                            # Only use if different from direct and mobile phones
+                            if (cleaned_phone != person['direct_phone'] or not person['found_direct']) and \
+                               (cleaned_phone != person['mobile_phone'] or not person['found_mobile']):
+                                person['personal_phone'] = cleaned_phone
+                                person['found_personal'] = True
+                                break
             
             # Extract emails - separate personal and business
             if not person['personal_email'] or not person['business_email']:
