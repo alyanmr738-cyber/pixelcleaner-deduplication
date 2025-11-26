@@ -241,6 +241,32 @@ def process_csv(input_file: str, output_file: str):
     output_rows = []
     
     for key, person in people_map.items():
+        # Select direct phone (first from DIRECT_NUMBER)
+        direct_phone = person['direct_phones'][0] if person['direct_phones'] else ''
+        phone_dnc = person['direct_dnc_flags'][0] if person['direct_dnc_flags'] else ''
+        
+        # Select mobile phone - prefer different from direct phone
+        mobile_phone = ''
+        if person['mobile_phones']:
+            for phone in person['mobile_phones']:
+                if phone != direct_phone:
+                    mobile_phone = phone
+                    break
+            # If no different phone found, use first mobile phone
+            if not mobile_phone:
+                mobile_phone = person['mobile_phones'][0]
+        
+        # Select personal phone - prefer different from both direct and mobile
+        personal_phone = ''
+        if person['personal_phones']:
+            for phone in person['personal_phones']:
+                if phone != direct_phone and phone != mobile_phone:
+                    personal_phone = phone
+                    break
+            # If no different phone found, use first personal phone
+            if not personal_phone:
+                personal_phone = person['personal_phones'][0]
+        
         output_row = {
             'Date': person['DATE'],
             'First Name': person['FIRST_NAME'],
@@ -249,9 +275,9 @@ def process_csv(input_file: str, output_file: str):
             'City': person['CITY'],
             'State': person['STATE'],
             'Zip': person['ZIP'],
-            'Direct Phone': person['direct_phone'] or '',
-            'Mobile Phone': person['mobile_phone'] or '',
-            'Personal Phone': person['personal_phone'] or '',
+            'Direct Phone': direct_phone,
+            'Mobile Phone': mobile_phone,
+            'Personal Phone': personal_phone,
             'Personal Email': person['personal_email'] or '',
             'Business Email': person['business_email'] or '',
         }
