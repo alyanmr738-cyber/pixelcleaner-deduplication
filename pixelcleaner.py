@@ -253,13 +253,13 @@ def process_csv(input_file: str, output_file: str):
     output_rows = []
     
     for key, person in people_map.items():
-        # Filter: keep only phones with DNC='N' or no DNC flag
-        filtered_pairs = filter_phones_with_dnc(person['phone_dnc_pairs'])
+        # Get all phone-DNC pairs (keep first occurrence order)
+        all_pairs = person['phone_dnc_pairs']
         
-        # Remove duplicate phones while preserving order
+        # Remove duplicate phones while preserving order (keep first occurrence)
         seen_phones = set()
         unique_pairs = []
-        for phone, dnc_flag in filtered_pairs:
+        for phone, dnc_flag in all_pairs:
             if phone not in seen_phones:
                 seen_phones.add(phone)
                 unique_pairs.append((phone, dnc_flag))
@@ -278,7 +278,7 @@ def process_csv(input_file: str, output_file: str):
         else:
             output_row['PRIMARY_PHONE'] = ''
         
-        # Add only the first phone DNC flag (one column)
+        # Add only the first phone's DNC value (one column only)
         if unique_pairs and unique_pairs[0][1]:
             output_row['PHONE_DNC'] = unique_pairs[0][1]
         
@@ -290,9 +290,11 @@ def process_csv(input_file: str, output_file: str):
         for i, email in enumerate(emails_list[1:6]):  # EMAIL_1 through EMAIL_5
             output_row[f'EMAIL_{i + 1}'] = email
         
-        # Add other fields
+        # Add other fields (excluding any DNC columns)
         for field, value in person['other_data'].items():
-            output_row[field] = value
+            # Skip any field with DNC in the name (we only want PHONE_DNC)
+            if 'DNC' not in field.upper():
+                output_row[field] = value
         
         output_rows.append(output_row)
     
