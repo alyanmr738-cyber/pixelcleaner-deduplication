@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pixel Cleaner</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+            text-align: center;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .logo-icon {
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+        }
+
+        h1 {
+            font-size: 36px;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            font-size: 16px;
+            color: #718096;
+            margin-bottom: 30px;
+        }
+
+        .upload-area {
+            border: 3px dashed #cbd5e0;
+            border-radius: 12px;
+            padding: 60px 20px;
+            margin-bottom: 20px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            background: #f7fafc;
+        }
+
+        .upload-area:hover {
+            border-color: #667eea;
+            background: #edf2f7;
+        }
+
+        .upload-area.dragover {
+            border-color: #667eea;
+            background: #e6fffa;
+        }
+
+        .upload-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+
+        .upload-text {
+            font-size: 18px;
+            color: #4a5568;
+            margin-bottom: 10px;
+            font-weight: 500;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .file-info {
+            margin-top: 15px;
+            padding: 15px;
+            background: #edf2f7;
+            border-radius: 8px;
+            display: none;
+        }
+
+        .file-info.show {
+            display: block;
+        }
+
+        .file-name {
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 5px;
+        }
+
+        .file-size {
+            font-size: 14px;
+            color: #718096;
+        }
+
+        .or-text {
+            margin: 20px 0;
+            color: #a0aec0;
+            font-weight: 500;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 18px;
+            font-weight: 600;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+            width: 100%;
+            max-width: 300px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-choose {
+            background: white;
+            color: #667eea;
+            border: 2px solid #667eea;
+            margin-bottom: 20px;
+        }
+
+        .btn-choose:hover {
+            background: #f7fafc;
+        }
+
+        .btn-process {
+            margin-top: 10px;
+        }
+
+        .progress-container {
+            display: none;
+            margin-top: 20px;
+        }
+
+        .progress-container.show {
+            display: block;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e2e8f0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            width: 0%;
+            transition: width 0.3s ease;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .progress-text {
+            color: #718096;
+            font-size: 14px;
+        }
+
+        .success-message {
+            display: none;
+            margin-top: 20px;
+            padding: 20px;
+            background: #f0fff4;
+            border: 2px solid #68d391;
+            border-radius: 10px;
+            color: #22543d;
+        }
+
+        .success-message.show {
+            display: block;
+        }
+
+        .error-message {
+            display: none;
+            margin-top: 20px;
+            padding: 20px;
+            background: #fff5f5;
+            border: 2px solid #fc8181;
+            border-radius: 10px;
+            color: #742a2a;
+        }
+
+        .error-message.show {
+            display: block;
+        }
+
+        .download-btn {
+            margin-top: 15px;
+            background: #48bb78;
+        }
+
+        .download-btn:hover {
+            background: #38a169;
+            box-shadow: 0 6px 20px rgba(72, 187, 120, 0.5);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">
+            <div class="logo-icon">🎯</div>
+            <h1>Pixel Cleaner</h1>
+        </div>
+        <p class="subtitle">Clean and deduplicate your Pixel export CSV files</p>
+
+        <div class="upload-area" id="uploadArea">
+            <div class="upload-icon">📄</div>
+            <div class="upload-text">Drag & drop your CSV file here</div>
+            <input type="file" id="fileInput" class="file-input" accept=".csv">
+        </div>
+
+        <div class="file-info" id="fileInfo">
+            <div class="file-name" id="fileName"></div>
+            <div class="file-size" id="fileSize"></div>
+        </div>
+
+        <p class="or-text">or</p>
+        
+        <button class="btn btn-choose" onclick="document.getElementById('fileInput').click()">
+            Choose File
+        </button>
+
+        <button class="btn btn-process" id="processBtn" onclick="processFile()" disabled>
+            Process File
+        </button>
+
+        <div class="progress-container" id="progressContainer">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div class="progress-text" id="progressText">Processing your file...</div>
+        </div>
+
+        <div class="success-message" id="successMessage">
+            <strong>✓ File processed successfully!</strong>
+            <p style="margin-top: 10px; font-size: 14px;">Your cleaned CSV file is ready for download.</p>
+            <button class="btn download-btn" id="downloadBtn" onclick="downloadFile()">
+                Download Cleaned File
+            </button>
+        </div>
+
+        <div class="error-message" id="errorMessage">
+            <strong>✗ Error processing file</strong>
+            <p style="margin-top: 10px; font-size: 14px;" id="errorText"></p>
+        </div>
+    </div>
+
+    <script>
+        let selectedFile = null;
+        let processedFileBlob = null;
+        let processedFileName = null;
+
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const fileInfo = document.getElementById('fileInfo');
+        const fileName = document.getElementById('fileName');
+        const fileSize = document.getElementById('fileSize');
+        const processBtn = document.getElementById('processBtn');
+        const progressContainer = document.getElementById('progressContainer');
+        const progressFill = document.getElementById('progressFill');
+        const progressText = document.getElementById('progressText');
+        const successMessage = document.getElementById('successMessage');
+        const errorMessage = document.getElementById('errorMessage');
+        const errorText = document.getElementById('errorText');
+
+        // Drag and drop handlers
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFileSelect(files[0]);
+            }
+        });
+
+        uploadArea.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFileSelect(e.target.files[0]);
+            }
+        });
+
+        function handleFileSelect(file) {
+            if (!file.name.endsWith('.csv')) {
+                showError('Please select a CSV file.');
+                return;
+            }
+
+            selectedFile = file;
+            fileName.textContent = file.name;
+            fileSize.textContent = formatFileSize(file.size);
+            fileInfo.classList.add('show');
+            processBtn.disabled = false;
+            successMessage.classList.remove('show');
+            errorMessage.classList.remove('show');
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+        }
+
+        async function processFile() {
+            if (!selectedFile) {
+                showError('Please select a file first.');
+                return;
+            }
+
+            // Reset UI
+            processBtn.disabled = true;
+            progressContainer.classList.add('show');
+            progressFill.style.width = '30%';
+            successMessage.classList.remove('show');
+            errorMessage.classList.remove('show');
+
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+
+            try {
+                progressFill.style.width = '50%';
+                progressText.textContent = 'Uploading file...';
+
+                const response = await fetch('/clean', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                progressFill.style.width = '80%';
+                progressText.textContent = 'Processing file...';
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ error: 'Unknown error occurred' }));
+                    throw new Error(errorData.error || `Server error: ${response.status}`);
+                }
+
+                progressFill.style.width = '100%';
+                progressText.textContent = 'Complete!';
+
+                // Get the file blob
+                processedFileBlob = await response.blob();
+                processedFileName = selectedFile.name.replace('.csv', '_cleaned.csv');
+
+                // Show success message
+                setTimeout(() => {
+                    progressContainer.classList.remove('show');
+                    successMessage.classList.add('show');
+                    processBtn.disabled = false;
+                    progressFill.style.width = '0%';
+                }, 500);
+
+            } catch (error) {
+                console.error('Error:', error);
+                progressContainer.classList.remove('show');
+                showError(error.message || 'Failed to process file. Please try again.');
+                processBtn.disabled = false;
+                progressFill.style.width = '0%';
+            }
+        }
+
+        function downloadFile() {
+            if (!processedFileBlob) {
+                showError('No processed file available.');
+                return;
+            }
+
+            const url = window.URL.createObjectURL(processedFileBlob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = processedFileName || 'cleaned_output.csv';
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        }
+
+        function showError(message) {
+            errorText.textContent = message;
+            errorMessage.classList.add('show');
+        }
+    </script>
+</body>
+</html>
+

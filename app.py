@@ -3,7 +3,7 @@ Flask web service for Pixel Cleaner
 Deploy this on Render to provide a web API for CSV cleaning
 """
 
-from flask import Flask, request, send_file, jsonify
+from flask import Flask, request, send_file, jsonify, render_template
 import subprocess
 import os
 import tempfile
@@ -13,13 +13,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return jsonify({
-        'message': 'Pixel Cleaner API',
-        'endpoints': {
-            '/health': 'Health check endpoint',
-            '/clean': 'POST - Clean CSV file (multipart/form-data with "file" field)'
-        }
-    })
+    return render_template('index.html')
 
 @app.route('/health')
 def health():
