@@ -4,17 +4,15 @@ PIXEL FORMAT CLEANER
 
 This script cleans CSV files by:
 - Removing duplicates based on FIRST_NAME + LAST_NAME
-- Picking the first email and phone number
-- Filtering phones based on DNC (Y/N) flags (keeping only N)
-- Creating PHONE_DNC columns for kept phones
-- Removing original DNC columns from output
+- Outputting in specific format: date, name, address, phones, emails
 - Handling large files efficiently
 """
 
 import csv
 import re
 import sys
-from collections import defaultdict, OrderedDict
+from datetime import datetime
+from collections import defaultdict
 from typing import Dict, List, Set, Optional, Tuple
 
 
@@ -70,60 +68,31 @@ def clean_value(value: str) -> str:
     return str(value).strip().replace(',', ' ')
 
 
-def is_phone_field(field_name: str) -> bool:
-    """Check if field name indicates a phone number field (but not DNC)."""
-    field_upper = field_name.upper()
-    if 'DNC' in field_upper:
-        return False
-    return any(keyword in field_upper for keyword in ['PHONE', 'MOBILE', 'CELL', 'NUMBER'])
+def is_personal_email(email: str) -> bool:
+    """Check if email is personal (gmail, yahoo, hotmail, outlook, etc.)."""
+    personal_domains = ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 
+                       'aol.com', 'icloud.com', 'me.com', 'mac.com', 'msn.com',
+                       'live.com', 'protonmail.com', 'mail.com', 'zoho.com']
+    email_lower = email.lower()
+    return any(domain in email_lower for domain in personal_domains)
 
 
-def is_email_field(field_name: str) -> bool:
-    """Check if field name indicates an email field."""
-    field_upper = field_name.upper()
-    return ('EMAIL' in field_upper or 'MAIL' in field_upper) and 'SHA' not in field_upper
-
-
-def is_dnc_field(field_name: str) -> bool:
-    """Check if field name indicates a DNC (Do Not Contact) flag field."""
-    field_upper = field_name.upper()
-    return 'DNC' in field_upper
-
-
-def should_skip_field(field_name: str) -> bool:
-    """Check if field should be skipped."""
-    field_upper = field_name.upper()
-    return 'SHA256' in field_upper or field_name == '__FILE_TYPE'
-
-
-def get_dnc_field_for_phone_field(phone_field: str, fieldnames: List[str]) -> Optional[str]:
-    """Find the corresponding DNC field for a phone field."""
-    phone_upper = phone_field.upper()
+def extract_date_from_timestamp(timestamp: str) -> str:
+    """Extract date (YYYY-MM-DD) from ActivityStartDate timestamp."""
+    if not timestamp:
+        return ''
     
-    # Try exact match first (e.g., DIRECT_NUMBER -> DIRECT_NUMBER_DNC)
-    dnc_field = phone_field + '_DNC'
-    if dnc_field in fieldnames:
-        return dnc_field
-    
-    # Try prefix match (e.g., MOBILE_PHONE -> MOBILE_PHONE_DNC)
-    for field in fieldnames:
-        if is_dnc_field(field):
-            # Check if this DNC field corresponds to the phone field
-            dnc_base = field.replace('_DNC', '').replace('DNC_', '').upper()
-            if dnc_base in phone_upper or phone_upper in dnc_base:
-                return field
-    
-    return None
-
-
-def filter_phones_with_dnc(phone_dnc_pairs: List[Tuple[str, str]]) -> List[Tuple[str, str]]:
-    """Filter phones to keep only those with DNC flag 'N'. Returns list of (phone, dnc_flag) tuples."""
-    filtered = []
-    for phone, dnc_flag in phone_dnc_pairs:
-        flag = (dnc_flag or "").upper()
-        if flag == "N" or not flag:
-            filtered.append((phone, "N" if flag == "N" else ""))
-    return filtered
+    try:
+        # Try ISO format first (2025-09-29T17:59:07Z)
+        if 'T' in timestamp:
+            date_part = timestamp.split('T')[0]
+            # Validate date format
+            datetime.strptime(date_part, '%Y-%m-%d')
+            return date_part
+        # Try other formats if needed
+        return timestamp.split()[0] if timestamp else ''
+    except:
+        return timestamp.split()[0] if timestamp else ''
 
 
 def process_csv(input_file: str, output_file: str):
@@ -134,8 +103,17 @@ def process_csv(input_file: str, output_file: str):
     people_map: Dict[str, Dict] = defaultdict(lambda: {
         'FIRST_NAME': '',
         'LAST_NAME': '',
-        'phone_dnc_pairs': [],  # List of (phone, dnc_flag) tuples, preserving order
-        'emails': set(),
+        'DATE': '',
+        'ADDRESS': '',
+        'CITY': '',
+        'STATE': '',
+        'ZIP': '',
+        'direct_phone': None,  # From DIRECT_NUMBER
+        'mobile_phone': None,  # From MOBILE_PHONE
+        'personal_phone': None,  # From PERSONAL_PHONE
+        'personal_email': None,
+        'business_email': None,
+        'phone_dnc': None,  # DNC value for direct phone
         'other_data': {}
     })
     
@@ -172,152 +150,143 @@ def process_csv(input_file: str, output_file: str):
                 person['FIRST_NAME'] = row.get('FIRST_NAME', '')
                 person['LAST_NAME'] = row.get('LAST_NAME', '')
             
-            # Collect phones with their DNC flags by matching field pairs
-            phone_dnc_pairs_for_row = []
+            # Extract date from ActivityStartDate (first occurrence)
+            if not person['DATE']:
+                activity_date = row.get('ActivityStartDate', '')
+                if activity_date:
+                    person['DATE'] = extract_date_from_timestamp(activity_date)
             
-            for field in fieldnames:
-                if is_phone_field(field):
-                    phone_value = row.get(field, '')
-                    if phone_value:
-                        phones = extract_multiple(phone_value)
-                        
-                        # Find corresponding DNC field
-                        dnc_field = get_dnc_field_for_phone_field(field, fieldnames)
-                        dnc_value = row.get(dnc_field, '') if dnc_field else ''
-                        dnc_flags = extract_multiple(dnc_value) if dnc_value else []
-                        
-                        # Match phones with DNC flags by position
-                        for i, phone_str in enumerate(phones):
-                            cleaned_phone = clean_phone(phone_str)
-                            if cleaned_phone:
-                                dnc_flag = dnc_flags[i].upper() if i < len(dnc_flags) else ''
-                                phone_dnc_pairs_for_row.append((cleaned_phone, dnc_flag))
+            # Extract address fields (first occurrence)
+            if not person['ADDRESS']:
+                person['ADDRESS'] = clean_value(row.get('PERSONAL_ADDRESS', ''))
+            if not person['CITY']:
+                person['CITY'] = clean_value(row.get('PERSONAL_CITY', ''))
+            if not person['STATE']:
+                person['STATE'] = clean_value(row.get('PERSONAL_STATE', ''))
+            if not person['ZIP']:
+                person['ZIP'] = clean_value(row.get('PERSONAL_ZIP', ''))
             
-            # Also check SKIPTRACE fields
-            skiptrace_wireless = row.get('SKIPTRACE_WIRELESS_NUMBERS', '')
-            skiptrace_dnc = row.get('SKIPTRACE_DNC', '').strip().upper()
-            if skiptrace_wireless:
-                phones = extract_multiple(skiptrace_wireless)
-                for phone_str in phones:
-                    cleaned_phone = clean_phone(phone_str)
-                    if cleaned_phone:
-                        phone_dnc_pairs_for_row.append((cleaned_phone, skiptrace_dnc))
+            # Extract DIRECT_NUMBER (direct phone)
+            if not person['direct_phone']:
+                direct_number = row.get('DIRECT_NUMBER', '')
+                if direct_number:
+                    phones = extract_multiple(direct_number)
+                    for phone_str in phones:
+                        cleaned_phone = clean_phone(phone_str)
+                        if cleaned_phone:
+                            person['direct_phone'] = cleaned_phone
+                            # Get DNC value for direct phone
+                            direct_dnc = row.get('DIRECT_NUMBER_DNC', '').strip().upper()
+                            if direct_dnc:
+                                dnc_flags = extract_multiple(direct_dnc)
+                                if dnc_flags:
+                                    person['phone_dnc'] = dnc_flags[0]
+                            break
             
-            # Add all phone-DNC pairs (avoid duplicates based on phone number)
-            seen_phones = {p[0] for p in person['phone_dnc_pairs']}
-            for phone, dnc_flag in phone_dnc_pairs_for_row:
-                if phone not in seen_phones:
-                    person['phone_dnc_pairs'].append((phone, dnc_flag))
-                    seen_phones.add(phone)
+            # Extract MOBILE_PHONE (first one)
+            if not person['mobile_phone']:
+                mobile_number = row.get('MOBILE_PHONE', '')
+                if mobile_number:
+                    phones = extract_multiple(mobile_number)
+                    for phone_str in phones:
+                        cleaned_phone = clean_phone(phone_str)
+                        if cleaned_phone:
+                            person['mobile_phone'] = cleaned_phone
+                            break
             
-            # Handle email fields - only first email
-            for field in fieldnames:
-                if should_skip_field(field):
-                    continue
-                
-                if is_email_field(field):
-                    if len(person['emails']) == 0:
-                        value = row.get(field, '')
-                        if value:
-                            for email_str in extract_multiple(value):
-                                cleaned_email = clean_email(email_str)
-                                if cleaned_email:
-                                    person['emails'].add(cleaned_email)
-                                    break  # Only first email
+            # Extract PERSONAL_PHONE (first one)
+            if not person['personal_phone']:
+                personal_number = row.get('PERSONAL_PHONE', '')
+                if personal_number:
+                    phones = extract_multiple(personal_number)
+                    for phone_str in phones:
+                        cleaned_phone = clean_phone(phone_str)
+                        if cleaned_phone:
+                            person['personal_phone'] = cleaned_phone
+                            break
             
-            # Store other fields (first occurrence, excluding DNC columns)
-            for field in fieldnames:
-                if should_skip_field(field):
-                    continue
+            # Extract emails - separate personal and business
+            if not person['personal_email'] or not person['business_email']:
+                # Check BUSINESS_EMAIL
+                business_email_val = row.get('BUSINESS_EMAIL', '')
+                if business_email_val and not person['business_email']:
+                    emails = extract_multiple(business_email_val)
+                    for email_str in emails:
+                        cleaned_email = clean_email(email_str)
+                        if cleaned_email:
+                            person['business_email'] = cleaned_email
+                            break
                 
-                if field in ['FIRST_NAME', 'LAST_NAME']:
-                    continue
+                # Check PERSONAL_EMAILS
+                personal_emails_val = row.get('PERSONAL_EMAILS', '')
+                if personal_emails_val:
+                    emails = extract_multiple(personal_emails_val)
+                    for email_str in emails:
+                        cleaned_email = clean_email(email_str)
+                        if cleaned_email:
+                            if is_personal_email(cleaned_email):
+                                if not person['personal_email']:
+                                    person['personal_email'] = cleaned_email
+                            else:
+                                if not person['business_email']:
+                                    person['business_email'] = cleaned_email
                 
-                if is_dnc_field(field):
-                    continue  # Skip DNC columns - we'll create new ones
-                
-                if is_phone_field(field) or is_email_field(field):
-                    continue  # Already processed
-                
-                if field not in person['other_data']:
-                    value = row.get(field, '')
-                    if value:
-                        cleaned = clean_value(value)
-                        if cleaned:
-                            person['other_data'][field] = cleaned
+                # Also check BUSINESS_VERIFIED_EMAILS
+                if not person['business_email']:
+                    business_verified = row.get('BUSINESS_VERIFIED_EMAILS', '')
+                    if business_verified:
+                        emails = extract_multiple(business_verified)
+                        for email_str in emails:
+                            cleaned_email = clean_email(email_str)
+                            if cleaned_email and not is_personal_email(cleaned_email):
+                                person['business_email'] = cleaned_email
+                                break
     
     print(f'✅ Processed {row_count} input rows')
     print(f'📊 Found {len(people_map)} unique people')
     
-    # Filter phones based on DNC flags and prepare output
+    # Prepare output rows in exact format requested
     output_rows = []
     
     for key, person in people_map.items():
-        # Get all phone-DNC pairs (keep first occurrence order)
-        all_pairs = person['phone_dnc_pairs']
-        
-        # Remove duplicate phones while preserving order (keep first occurrence)
-        seen_phones = set()
-        unique_pairs = []
-        for phone, dnc_flag in all_pairs:
-            if phone not in seen_phones:
-                seen_phones.add(phone)
-                unique_pairs.append((phone, dnc_flag))
-        
-        # Build output row
         output_row = {
-            'FIRST_NAME': person['FIRST_NAME'],
-            'LAST_NAME': person['LAST_NAME'],
+            'Date': person['DATE'],
+            'First Name': person['FIRST_NAME'],
+            'Last Name': person['LAST_NAME'],
+            'Address': person['ADDRESS'],
+            'City': person['CITY'],
+            'State': person['STATE'],
+            'Zip': person['ZIP'],
+            'Direct Phone': person['direct_phone'] or '',
+            'Mobile Phone': person['mobile_phone'] or '',
+            'Personal Phone': person['personal_phone'] or '',
+            'Personal Email': person['personal_email'] or '',
+            'Business Email': person['business_email'] or '',
         }
-        
-        # Add only the first phone number
-        if unique_pairs:
-            output_row['PRIMARY_PHONE'] = unique_pairs[0][0]
-            # Add DNC value for the first phone
-            if unique_pairs[0][1]:
-                output_row['PHONE_DNC'] = unique_pairs[0][1]
-        else:
-            output_row['PRIMARY_PHONE'] = ''
-        
-        # Add emails
-        emails_list = list(person['emails'])
-        output_row['PRIMARY_EMAIL'] = emails_list[0] if emails_list else ''
-        
-        # Add additional emails
-        for i, email in enumerate(emails_list[1:6]):  # EMAIL_1 through EMAIL_5
-            output_row[f'EMAIL_{i + 1}'] = email
-        
-        # Add other fields (excluding any DNC columns)
-        for field, value in person['other_data'].items():
-            # Skip any field with DNC in the name (we only want PHONE_DNC)
-            if 'DNC' not in field.upper():
-                output_row[field] = value
         
         output_rows.append(output_row)
     
-    # Write output CSV
+    # Write output CSV in exact order
+    fieldnames_output = [
+        'Date',
+        'First Name',
+        'Last Name',
+        'Address',
+        'City',
+        'State',
+        'Zip',
+        'Direct Phone',
+        'Mobile Phone',
+        'Personal Phone',
+        'Personal Email',
+        'Business Email'
+    ]
+    
     print(f'💾 Writing output file: {output_file}')
     
     if not output_rows:
         print('⚠️  Warning: No output rows to write')
         return
-    
-    # Get all unique field names from output rows
-    all_fields = set()
-    all_fields.update(['FIRST_NAME', 'LAST_NAME', 'PRIMARY_PHONE', 'PRIMARY_EMAIL'])
-    
-    for row in output_rows:
-        all_fields.update(row.keys())
-    
-    # Sort fields: put standard fields first, then others
-    standard_fields = ['FIRST_NAME', 'LAST_NAME', 'PRIMARY_PHONE', 'PRIMARY_EMAIL']
-    dnc_field = ['PHONE_DNC'] if 'PHONE_DNC' in all_fields else []
-    email_fields = sorted([f for f in all_fields if f.startswith('EMAIL_')])
-    # Exclude all PHONE_* columns except PRIMARY_PHONE and PHONE_DNC
-    other_fields = sorted([f for f in all_fields if f not in standard_fields + dnc_field + email_fields and not f.startswith('PHONE_')])
-    
-    # Order: standard fields (includes PRIMARY_PHONE), DNC field, emails, others
-    fieldnames_output = standard_fields + dnc_field + email_fields + other_fields
     
     with open(output_file, 'w', newline='', encoding='utf-8') as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames_output, extrasaction='ignore')
